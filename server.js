@@ -11,19 +11,15 @@ mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/lost-foun
   .then(() => console.log("Connected to MongoDB"))
   .catch(err => console.error("MongoDB connection error:", err));
 
-// Report Schema
-const reportSchema = new mongoose.Schema({
-  title: String,
-  description: String,
-  location: String,
-  contact: String,
-  image_path: String,
-  created_at: { type: Date, default: Date.now }
-});
+// CORS configuration
+const corsOptions = {
+  origin: ['https://lost-found-platform-frontend.vercel.app', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
 
-const Report = mongoose.model("Report", reportSchema);
-
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Ensure uploads directory exists
