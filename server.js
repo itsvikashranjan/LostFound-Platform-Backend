@@ -2,25 +2,37 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const multer = require("multer");
-const sqlite3 = require("sqlite3").verbose();
+const mongoose = require("mongoose");
+const path = require("path");
+require("dotenv").config();
+
+// MongoDB connection
+mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/lost-found")
+  .then(() => console.log("Connected to MongoDB"))
+  .catch(err => console.error("MongoDB connection error:", err));
+
+// Report Schema
+const reportSchema = new mongoose.Schema({
+  title: String,
+  description: String,
+  location: String,
+  contact: String,
+  image_path: String,
+  created_at: { type: Date, default: Date.now }
+});
+
+const Report = mongoose.model("Report", reportSchema);
 
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
 
-const db = new sqlite3.Database("report.db");
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, "uploads");
+if (!require("fs").existsSync(uploadsDir)) {
+  require("fs").mkdirSync(uploadsDir, { recursive: true });
+}
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT,
-    description TEXT,
-    location TEXT,
-    contact TEXT,
-    image_path TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+app.use("/uploads", express.static(uploadsDir));
 
 app.get("/", (req, res) => {
   res.send("Hello, World!");
@@ -45,39 +57,40 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-app.post("/report", upload.single("image"), (req, res) => {
-  const { title, description, location, contact } = req.body;
-  const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+app.post("/report", upload.single("image"), async (req, res) => {
+  try {
+    const { title, description, location, contact } = req.body;
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
 
-  const stmt = db.prepare(`
-    INSERT INTO reports (title, description, location, contact, image_path)
-    VALUES (?, ?, ?,?, ?)
-  `);
+    const report = new Report({
+      title,
+      description,
+      location,
+      contact,
+      image_path: imagePath
+    });
 
-  stmt.run(title, description, location, contact, imagePath, function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({ message: "Report saved", reportId: this.lastID });
-  });
+    const savedReport = await report.save();
+    res.json({ message: "Report saved", reportId: savedReport._id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/reports", (req, res) => {
-  db.all("SELECT * FROM reports ORDER BY created_at DESC", (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    // Append full image URL
-    const reportsWithImageURL = rows.map((report) => ({
-      ...report,
-      image_url: report.image_path
-        ? `http://localhost:${PORT}${report.image_path}`
-        : null,
+app.get("/reports", async (req, res) => {
+  try {
+    const reports = await Report.find().sort({ created_at: -1 });
+    
+    const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+    const reportsWithImageURL = reports.map(report => ({
+      ...report.toObject(),
+      image_url: report.image_path ? `${baseUrl}${report.image_path}` : null
     }));
 
     res.json(reportsWithImageURL);
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
