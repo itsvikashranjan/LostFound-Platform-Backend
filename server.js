@@ -10,6 +10,17 @@ require("dotenv").config();
 mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/lost-found")
   .then(() => console.log("Connected to MongoDB"))
   .catch(err => console.error("MongoDB connection error:", err));
+// Report Schema
+const reportSchema = new mongoose.Schema({
+  title: String,
+  description: String,
+  location: String,
+  contact: String,
+  image_path: String,
+  created_at: { type: Date, default: Date.now }
+});
+
+const Report = mongoose.model("Report", reportSchema);
 
 // CORS configuration
 const corsOptions = {
